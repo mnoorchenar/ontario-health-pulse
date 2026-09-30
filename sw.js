@@ -1,6 +1,6 @@
 // Service worker: caches the app files and the latest data.json so the page reloads with no network.
 // Bump VERSION when app files change so old copies are replaced.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const APP_CACHE = `ohp-app-${VERSION}`;
 const DATA_CACHE = 'ohp-data'; // separate so app upgrades never discard a newer downloaded snapshot
 const DATA_PATH = new URL('data/data.json', self.registration.scope).pathname;

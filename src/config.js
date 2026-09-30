@@ -13,10 +13,16 @@ export const UPDATE_TIMEOUT_MS = 15000;
 export const DISCLAIMER =
   'Independent demo built on public, aggregated data. Not an official tool and not medical advice.';
 
-// Optional "smarter answers" model. Loaded only after the user clicks the button.
+// Optional "smarter answers": Hugging Face Inference Providers (OpenAI-compatible). The user pastes their own free
+// token in the page; it is kept in memory only. Edit the model list here (ids as shown on huggingface.co/models).
 export const LLM = {
-  libraryUrl: 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/transformers.min.js',
-  modelId: 'onnx-community/Qwen2.5-0.5B-Instruct',
+  endpoint: 'https://router.huggingface.co/v1/chat/completions',
+  models: [
+    'meta-llama/Llama-3.1-8B-Instruct',
+    'openai/gpt-oss-20b',
+    'Qwen/Qwen3-4B-Instruct-2507',
+    'google/gemma-3-4b-it',
+  ],
 };
 
 export const FORECAST_HORIZON = 6;

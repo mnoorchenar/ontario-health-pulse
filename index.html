@@ -126,11 +126,14 @@
             <input id="chat-input" type="text" maxlength="200" placeholder="For example: How does this compare with Ontario?">
             <button type="submit" class="btn primary">Ask</button>
           </form>
-          <div class="llm" id="llm-box">
-            <button type="button" class="btn" id="llm-btn">Enable smarter answers</button>
-            <p class="subtle" id="llm-note">Optional. Needs a large one-time download (several hundred MB) and a newer laptop. It reads the small fact list for this region only, and falls back to the simple rules if anything goes wrong.</p>
-            <progress id="llm-progress" max="100" value="0" hidden aria-label="Model download progress"></progress>
-          </div>
+          <details class="llm" id="llm-box">
+            <summary>Smarter answers (optional, needs internet)</summary>
+            <p class="subtle" id="llm-note">Uses a free Hugging Face model over the internet with your own free access token. Nothing to download. The token stays in this tab only and is never saved. The model gets only the small fact list for this region, and if it fails the simple rules take over.</p>
+            <label class="field"><span>Model</span><select id="llm-model"></select></label>
+            <label class="field" id="llm-custom-wrap" hidden><span>Model id</span><input id="llm-custom" type="text" placeholder="owner/model-name" autocomplete="off" spellcheck="false"></label>
+            <label class="field"><span>Hugging Face token</span><input id="llm-token" type="password" placeholder="hf_..." autocomplete="off" spellcheck="false"></label>
+            <div class="llm-actions"><button type="button" class="btn" id="llm-btn">Turn on smarter answers</button></div>
+          </details>
         </section>
       </section>
     </div>

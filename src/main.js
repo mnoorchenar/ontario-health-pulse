@@ -1,6 +1,6 @@
 // App wiring: loads the snapshot, draws the map and detail panel, runs the chat and the Update button.
 import {
-  REMOTE_DATA_URL, LOCAL_DATA_URL, BOUNDARIES_URL, DATA_CACHE_NAME, UPDATE_TIMEOUT_MS, FORECAST_HORIZON, STALE_AFTER_DAYS,
+  REMOTE_DATA_URL, LLM, LOCAL_DATA_URL, BOUNDARIES_URL, DATA_CACHE_NAME, UPDATE_TIMEOUT_MS, FORECAST_HORIZON, STALE_AFTER_DAYS,
 } from './config.js';
 import {
   INDICATORS, getSeries, latest, change, valueBack, formatDate, formatValue, formatChange, regionName, daysOld, YEAR_WEEKS, indicatorLabel,
@@ -11,7 +11,7 @@ import { summarize } from './summary.js';
 import { answerQuestion, EXAMPLES } from './chat.js';
 import { createMap, rampColor, rampGradient, NO_DATA_FILL } from './map.js';
 import { renderTrend } from './charts.js';
-import { loadModel, askModel, llmReady } from './llm.js';
+import { connect, disconnect, askModel, llmReady } from './llm.js';
 
 const $ = (id) => document.getElementById(id);
 const state = {
@@ -395,7 +395,7 @@ function renderChips() {
 
 function renderChatMeta() {
   $('chat-mode').textContent = state.llm === 'ready'
-    ? 'Mode: smarter answers, running on this device. Numbers are checked against the data.'
+    ? 'Mode: smarter answers (online model). Any answer with a number not in the data is discarded.'
     : 'Mode: simple rules. Works fully offline. Every number comes from the data.';
   if (!$('chat-chips').children.length) renderChips();
   if (!$('chat-log').children.length) addMsg('bot', 'Hello. Ask me about the selected region, or tap one of the example questions below.', null);
@@ -440,28 +440,43 @@ async function ask(q) {
   addMsg('bot', out.text, out.source, out.examples);
 }
 
+function fillModels() {
+  const sel = $('llm-model');
+  sel.replaceChildren();
+  for (const m of LLM.models) sel.appendChild(Object.assign(document.createElement('option'), { value: m, textContent: m }));
+  sel.appendChild(Object.assign(document.createElement('option'), { value: '__other', textContent: 'Other (type a model id)' }));
+  sel.addEventListener('change', () => { $('llm-custom-wrap').hidden = sel.value !== '__other'; });
+}
+
 async function enableSmarter() {
   const btn = $('llm-btn');
   const note = $('llm-note');
-  const prog = $('llm-progress');
-  if (state.llm === 'ready') return;
-  if (navigator.onLine === false) {
-    note.textContent = 'You appear to be offline. Smarter answers need a one-time download, so the simple rules stay on for now.';
+  if (state.llm === 'ready') {
+    disconnect();
+    state.llm = 'off';
+    $('llm-token').value = '';
+    btn.textContent = 'Turn on smarter answers';
+    note.textContent = 'Smarter answers are off. The simple rules are in use.';
+    renderChatMeta();
     return;
   }
-  btn.disabled = true; btn.classList.add('loading'); prog.hidden = false; prog.value = 0;
-  note.textContent = 'Downloading the language model. This can take several minutes. You can keep using the simple rules meanwhile.';
-  const ok = await loadModel((pct) => { prog.value = pct; });
-  btn.disabled = false; btn.classList.remove('loading'); prog.hidden = true;
-  if (ok) {
+  if (navigator.onLine === false) {
+    note.textContent = 'You appear to be offline. Smarter answers need internet, so the simple rules stay on.';
+    return;
+  }
+  const choice = $('llm-model').value;
+  const model = choice === '__other' ? $('llm-custom').value : choice;
+  btn.disabled = true; btn.classList.add('loading');
+  note.textContent = 'Checking your token and the model...';
+  const r = await connect($('llm-token').value, model);
+  btn.disabled = false; btn.classList.remove('loading');
+  if (r.ok) {
     state.llm = 'ready';
-    btn.textContent = 'Smarter answers are on';
-    btn.disabled = true;
-    note.textContent = 'Smarter answers are on. If the model fails on a question, the simple rules take over.';
+    btn.textContent = 'Turn off smarter answers';
+    note.textContent = `Smarter answers are on (${model}). If it fails on a question, the simple rules take over.`;
   } else {
     state.llm = 'off';
-    btn.textContent = 'Try smarter answers again';
-    note.textContent = 'Smarter answers could not start (they need internet the first time and a newer device). Still using the simple rules.';
+    note.textContent = `${r.reason} Still using the simple rules.`;
   }
   renderChatMeta();
 }
@@ -518,6 +533,7 @@ async function updateData() {
 
 // ---------------------------------------------------------------------------------------------
 wireStaticEvents();
+fillModels();
 boot();
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => { /* offline caching unavailable */ }); });

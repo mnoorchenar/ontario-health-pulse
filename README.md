@@ -1,4 +1,4 @@
-﻿---
+---
 title: ontario-health-pulse
 colorFrom: blue
 colorTo: green
@@ -65,7 +65,7 @@ The page never calls an official data site. The button fetches `data/data.json` 
 
 ## Offline behaviour
 
-A service worker (`sw.js`) caches every app file, the map shapes and the latest `data.json` after the first load. The Chart.js library is bundled in `vendor/`; there are no CDN links, web fonts or map tiles. The optional "Enable smarter answers" button is the single exception: only when clicked, it downloads a small open language model (about 0.5 billion parameters, several hundred MB, one time) and its runtime from the internet. If that fails, the chat quietly stays in rules mode, and any model answer containing a number not in the region's facts is discarded.
+A service worker (`sw.js`) caches every app file, the map shapes and the latest `data.json` after the first load. The Chart.js library is bundled in `vendor/`; there are no CDN links, web fonts or map tiles. The optional "Smarter answers" panel is the single exception and needs internet: you pick one of a few free Hugging Face models (or type a model id) and paste your own free access token. Nothing is downloaded. The token is kept in memory for that tab only (never saved, never in this repository), and only a small fact list for the selected region plus your question is sent. If the call fails, the chat quietly stays in rules mode, and any model answer containing a number that is not in the facts is discarded. The model list is one constant in `src/config.js`.
 
 ## Chat
 
@@ -101,7 +101,7 @@ Public health units that merged on 1 January 2025 (Brant + Haldimand-Norfolk = G
 
 ## Privacy and safety
 
-Only public, aggregated data by PHU and date is used. No personal data is requested, stored or sent, and what you type in the chat never leaves the page (except that, if you turn on smarter answers, the model runs locally in your browser). Real use would follow Ontario privacy laws such as PHIPA and MFIPPA. The app gives no medical advice; for personal health questions contact a health professional or your local public health unit.
+Only public, aggregated data by PHU and date is used. No personal data is requested, stored or sent, and what you type in the chat never leaves the page (except that, if you turn on smarter answers, your question and the region facts are sent to the Hugging Face model you chose, using your own token). Real use would follow Ontario privacy laws such as PHIPA and MFIPPA. The app gives no medical advice; for personal health questions contact a health professional or your local public health unit.
 
 ## Project layout
 

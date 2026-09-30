@@ -1,30 +1,13 @@
-// Optional "smarter answers": a small open language model that runs in the browser (transformers.js).
-// Nothing here loads until the user clicks "Enable smarter answers". Every failure falls back to rules mode.
+// Optional "smarter answers" through the Hugging Face Inference Providers API (free-tier token supplied by the user).
+// The token lives only in this module's memory: never saved, never written to the page, never in the project.
+// Every failure returns null / false so the chat falls back to rules mode. Nothing here throws.
 import { LLM } from './config.js';
 import { buildFactsBlock, numbersAreGrounded, NO_DATA } from './chat.js';
 
-let generator = null;
+let session = null; // { token, model }
 
-export const llmReady = () => generator !== null;
-
-/** Download and start the model. Resolves true on success, false on any failure (never throws). */
-export async function loadModel(onProgress) {
-  try {
-    const lib = await import(/* @vite-ignore */ LLM.libraryUrl);
-    const device = typeof navigator !== 'undefined' && navigator.gpu ? 'webgpu' : 'wasm';
-    generator = await lib.pipeline('text-generation', LLM.modelId, {
-      dtype: 'q4',
-      device,
-      progress_callback: (p) => {
-        if (onProgress && p && p.status === 'progress' && typeof p.progress === 'number') onProgress(Math.round(p.progress));
-      },
-    });
-    return true;
-  } catch (err) {
-    generator = null;
-    return false;
-  }
-}
+export const llmReady = () => session !== null;
+export const disconnect = () => { session = null; };
 
 export function systemPrompt(facts) {
   return [
@@ -39,22 +22,54 @@ export function systemPrompt(facts) {
   ].join('\n');
 }
 
-/** Returns {text} or null when the model is unavailable, fails, times out, or is not grounded in the facts. */
-export async function askModel(question, data, regionId, timeoutMs = 60000) {
-  if (!generator) return null;
-  const facts = buildFactsBlock(data, regionId);
+function clean(text) {
+  return String(text || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+}
+
+async function chat(token, model, messages, maxTokens, timeoutMs) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const run = generator(
-      [{ role: 'system', content: systemPrompt(facts) }, { role: 'user', content: String(question).slice(0, 300) }],
-      { max_new_tokens: 90, do_sample: false },
-    );
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs));
-    const out = await Promise.race([run, timeout]);
-    const msg = out && out[0] && out[0].generated_text;
-    const text = (Array.isArray(msg) ? msg[msg.length - 1].content : String(msg || '')).trim();
-    if (!text || !numbersAreGrounded(text, facts)) return null;
-    return { text };
+    const res = await fetch(LLM.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature: 0, stream: false }),
+      signal: ctl.signal,
+    });
+    if (!res.ok) return { ok: false, status: res.status };
+    const json = await res.json();
+    const msg = json && json.choices && json.choices[0] && json.choices[0].message;
+    const text = clean(msg && msg.content);
+    return text ? { ok: true, text } : { ok: false, status: 0 };
   } catch (err) {
-    return null;
+    return { ok: false, status: 0 };
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+/** Check the token and model with a tiny request. Returns {ok, reason}; reason is a short friendly sentence. */
+export async function connect(token, model) {
+  const t = String(token || '').trim();
+  const m = String(model || '').trim();
+  if (!t || !m) return { ok: false, reason: 'Please paste a token and choose a model.' };
+  const r = await chat(t, m, [{ role: 'user', content: 'Reply with the word OK.' }], 200, 30000);
+  if (r.ok) { session = { token: t, model: m }; return { ok: true, reason: '' }; }
+  session = null;
+  if (r.status === 401 || r.status === 403) return { ok: false, reason: 'That token was not accepted. Check it can call Inference Providers.' };
+  if (r.status === 402 || r.status === 429) return { ok: false, reason: 'The free quota for this token is used up right now. Try later or pick another model.' };
+  if (r.status === 400 || r.status === 404) return { ok: false, reason: 'That model is not available through your providers. Pick another model.' };
+  return { ok: false, reason: 'Could not reach the service. Check your internet connection.' };
+}
+
+/** Returns {text} or null when unavailable, failed, or the answer contains numbers that are not in the facts. */
+export async function askModel(question, data, regionId, timeoutMs = 45000) {
+  if (!session) return null;
+  const facts = buildFactsBlock(data, regionId);
+  const r = await chat(session.token, session.model, [
+    { role: 'system', content: systemPrompt(facts) },
+    { role: 'user', content: String(question).slice(0, 300) },
+  ], 400, timeoutMs);
+  if (!r.ok || !numbersAreGrounded(r.text, facts)) return null;
+  return { text: r.text };
 }
