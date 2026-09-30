@@ -45,7 +45,7 @@ class Answer {
   num(text) { this.numbers.add(String(text)); return text; }
 }
 
-function findRegion(q, data) {
+function findRegion(q, data, cities = []) {
   let best = null;
   const consider = (alias, id) => {
     if (q.includes(` ${alias} `) && (!best || alias.length > best.alias.length)) best = { alias, id };
@@ -55,10 +55,14 @@ function findRegion(q, data) {
     const core = p.name.toLowerCase().replace(/[^a-z ]+/g, ' ').split(' ').filter((w) => w && !GENERIC.has(w)).join(' ');
     if (core) consider(core, p.id);
   }
+  const before = best;
+  for (const c of cities) consider(norm(c.name).trim(), c.phu);
   if (!best) return null;
+  const cityHit = best !== before ? cities.find((c) => norm(c.name).trim() === best.alias) : null;
   const phu = data.phus.find((p) => p.id === best.id);
   if (!phu) return null;
   const mergedNote = phu.merged_from && phu.merged_from.length && ['brant', 'haldimand', 'norfolk', 'peterborough', 'kawartha', 'haliburton', 'porcupine', 'timiskaming', 'timmins', 'kingston', 'frontenac', 'hastings', 'leeds', 'grenville', 'lanark', 'prince edward', 'pine ridge'].includes(best.alias);
+  if (cityHit && !phu.name.toLowerCase().includes(cityHit.name.toLowerCase())) return { id: phu.id, note: `${cityHit.name} is served by ${phu.name}, so I am using that unit.` };
   return { id: phu.id, note: mergedNote ? `${best.alias.replace(/\b\w/g, (c) => c.toUpperCase())} is now part of ${phu.name}, so I am using that unit.` : null };
 }
 
@@ -116,7 +120,7 @@ export function answerQuestion(question, ctx) {
     return finish('help', null, true, true);
   }
 
-  const region = findRegion(q, data);
+  const region = findRegion(q, data, ctx.cities || []);
   const regionId = region ? region.id : ctx.regionId;
   const name = regionName(data, regionId);
   const indSel = findIndicator(q, ctx.indicator);

@@ -64,17 +64,87 @@ export function createMap(container, geojson, { onSelect, tooltip }) {
     g.appendChild(p);
     paths.set(f.properties.id, p);
   }
+  const cityLayer = el('g', { class: 'city-layer', 'aria-hidden': 'true' });
+  const markerLayer = el('g', { class: 'marker-layer', 'aria-hidden': 'true' });
+  svg.append(cityLayer, markerLayer);
   container.replaceChildren(svg);
 
+  const xy = (lon, lat) => { const [x, y] = project([lon, lat]); return [(x - full.x) * full.scale, (y - full.y) * full.scale]; };
+  const LEFT = new Set(['Hamilton', 'Sarnia', 'Kitchener', 'Kenora', 'Sault Ste. Marie']);
+  let currentView = 'all';
+  let cityNodes = [];
+  let marker = null;
+
+  /** Keep dots and text a constant size on screen whatever the zoom. */
+  function applyScale() {
+    const vb = svg.viewBox.baseVal;
+    const px = svg.getBoundingClientRect().width || 500;
+    const k = vb.width / px;
+    const flag = currentView === 'south' ? 'S' : 'A';
+    for (const n of cityNodes) {
+      n.g.style.display = n.flags.includes(flag) && !(marker && marker.name === n.name) ? '' : 'none';
+      n.dot.setAttribute('r', (3.4 * k).toFixed(2));
+      const left = LEFT.has(n.name);
+      n.text.setAttribute('x', ((left ? -6 : 6) * k).toFixed(2));
+      n.text.setAttribute('y', (4 * k).toFixed(2));
+      n.text.setAttribute('text-anchor', left ? 'end' : 'start');
+      n.text.style.fontSize = `${(12.5 * k).toFixed(2)}px`;
+      n.text.style.strokeWidth = `${(3 * k).toFixed(2)}px`;
+    }
+    if (marker) {
+      marker.ring.setAttribute('r', (8 * k).toFixed(2));
+      marker.ring.style.strokeWidth = `${(3 * k).toFixed(2)}px`;
+      marker.text.setAttribute('x', (11 * k).toFixed(2));
+      marker.text.setAttribute('y', (-9 * k).toFixed(2));
+      marker.text.style.fontSize = `${(14 * k).toFixed(2)}px`;
+      marker.text.style.strokeWidth = `${(3.5 * k).toFixed(2)}px`;
+    }
+  }
+
   function setView(name) {
+    currentView = name;
     const bb = VIEWS[name] || box;
     const v = viewBox(bb);
     svg.setAttribute('viewBox', `${fmt((v.x - full.x) * full.scale)} ${fmt((v.y - full.y) * full.scale)} ${fmt(v.w * full.scale)} ${fmt(v.h * full.scale)}`);
+    applyScale();
   }
   setView('all');
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(applyScale).observe(container);
 
   return {
     setView,
+    /** Draw small labelled dots for the main cities (those with a label flag in cities.json). */
+    setCities(list) {
+      cityLayer.replaceChildren();
+      cityNodes = [];
+      for (const c of list.filter((x) => x.label)) {
+        const [x, y] = xy(c.lon, c.lat);
+        const grp = el('g', { transform: `translate(${x.toFixed(1)} ${y.toFixed(1)})`, class: 'city' });
+        const dot = el('circle', { class: 'city-dot' });
+        const text = el('text', { class: 'city-label' });
+        text.textContent = c.name;
+        grp.append(dot, text);
+        cityLayer.appendChild(grp);
+        cityNodes.push({ g: grp, dot, text, name: c.name, flags: c.label });
+      }
+      applyScale();
+    },
+    /** Show a pin on a searched city (null to remove). */
+    setMarker(c) {
+      markerLayer.replaceChildren();
+      marker = null;
+      if (c) {
+        const [x, y] = xy(c.lon, c.lat);
+        const grp = el('g', { transform: `translate(${x.toFixed(1)} ${y.toFixed(1)})` });
+        const ring = el('circle', { class: 'marker-ring' });
+        const text = el('text', { class: 'marker-label' });
+        text.textContent = c.name;
+        grp.append(ring, text);
+        markerLayer.appendChild(grp);
+        marker = { ring, text, name: c.name };
+        applyScale();
+      }
+    },
     /** @param {(id:number)=>{fill:string,label:string}} styleFor */
     update(styleFor, selectedId) {
       for (const [id, p] of paths) {

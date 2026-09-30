@@ -22,6 +22,7 @@ const APP_FILES = [
   'src/charts.js',
   'vendor/chart.umd.js',
   'data/phu_boundaries.geojson',
+  'data/cities.json',
 ];
 
 self.addEventListener('install', (event) => {

@@ -53,6 +53,12 @@
     <div class="layout" id="layout" hidden>
       <section class="card map-card" aria-labelledby="map-h">
         <h2 id="map-h">Map of public health units</h2>
+        <div class="find">
+          <label class="field" for="city-input"><span>Find your city or town</span></label>
+          <input id="city-input" type="search" list="city-list" placeholder="For example: Hamilton, London, Thunder Bay" autocomplete="off" spellcheck="false">
+          <datalist id="city-list"></datalist>
+          <p class="subtle find-msg" id="city-msg" role="status" aria-live="polite"></p>
+        </div>
         <div class="controls">
           <label class="field">
             <span>Colour the map by</span>

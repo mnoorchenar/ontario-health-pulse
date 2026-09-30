@@ -6,6 +6,7 @@ export const REMOTE_DATA_URL =
   'https://raw.githubusercontent.com/mnoorchenar/ontario-health-pulse/main/data/data.json';
 
 export const LOCAL_DATA_URL = 'data/data.json';
+export const CITIES_URL = 'data/cities.json';
 export const BOUNDARIES_URL = 'data/phu_boundaries.geojson';
 export const DATA_CACHE_NAME = 'ohp-data';
 export const UPDATE_TIMEOUT_MS = 15000;

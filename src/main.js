@@ -1,6 +1,6 @@
 // App wiring: loads the snapshot, draws the map and detail panel, runs the chat and the Update button.
 import {
-  REMOTE_DATA_URL, LLM, LOCAL_DATA_URL, BOUNDARIES_URL, DATA_CACHE_NAME, UPDATE_TIMEOUT_MS, FORECAST_HORIZON, STALE_AFTER_DAYS,
+  REMOTE_DATA_URL, LLM, LOCAL_DATA_URL, BOUNDARIES_URL, CITIES_URL, DATA_CACHE_NAME, UPDATE_TIMEOUT_MS, FORECAST_HORIZON, STALE_AFTER_DAYS,
 } from './config.js';
 import {
   INDICATORS, getSeries, latest, change, valueBack, formatDate, formatValue, formatChange, regionName, daysOld, YEAR_WEEKS, indicatorLabel,
@@ -11,12 +11,13 @@ import { summarize } from './summary.js';
 import { answerQuestion, EXAMPLES } from './chat.js';
 import { createMap, rampColor, rampGradient, NO_DATA_FILL } from './map.js';
 import { renderTrend } from './charts.js';
+import { findPlace } from './cities.js';
 import { connect, disconnect, askModel, llmReady } from './llm.js';
 
 const $ = (id) => document.getElementById(id);
 const state = {
   data: null, geo: null, known: null, regionId: 'ON', ind: 'pos', mode: 'pos:latest', range: 104, showFc: true, view: 'all',
-  llm: 'off', mapApi: null,
+  llm: 'off', mapApi: null, cities: [], city: null,
 };
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -41,11 +42,11 @@ async function loadJson(url) {
 async function boot() {
   $('fatal').hidden = true;
   try {
-    const [data, geo] = await Promise.all([loadJson(dataUrl()), loadJson(BOUNDARIES_URL)]);
+    const [data, geo, cities] = await Promise.all([loadJson(dataUrl()), loadJson(BOUNDARIES_URL), loadJson(CITIES_URL).catch(() => [])]);
     const known = knownFromBoundaries(geo);
     const v = validateSnapshot(data, known, null);
     if (!v.ok) throw new Error(v.errors.join('; '));
-    Object.assign(state, { data, geo, known });
+    Object.assign(state, { data, geo, known, cities: Array.isArray(cities) ? cities : [] });
   } catch (err) {
     $('layout').hidden = true;
     $('fatal').hidden = false;
@@ -56,6 +57,8 @@ async function boot() {
   buildControls();
   $('layout').hidden = false;
   state.mapApi = createMap($('map'), state.geo, { onSelect: (id) => selectRegion(id, true), tooltip });
+  state.mapApi.setCities(state.cities);
+  fillCities();
   renderAll();
 }
 
@@ -140,6 +143,8 @@ function wireStaticEvents() {
   $('retry-btn').addEventListener('click', boot);
   $('chat-form').addEventListener('submit', (e) => { e.preventDefault(); const i = $('chat-input'); const q = i.value.trim(); i.value = ''; if (q) ask(q); });
   $('llm-btn').addEventListener('click', enableSmarter);
+  $('city-input').addEventListener('change', searchPlace);
+  $('city-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchPlace(); } });
   window.addEventListener('online', netStatus);
   window.addEventListener('offline', netStatus);
   netStatus();
@@ -153,8 +158,36 @@ function syncThemeButton() {
 }
 function netStatus() { $('net').textContent = navigator.onLine === false ? 'Offline: using saved data' : ''; }
 
-function selectRegion(id, fromMap) {
+function fillCities() {
+  const dl = $('city-list');
+  dl.replaceChildren();
+  for (const c of state.cities) dl.appendChild(Object.assign(document.createElement('option'), { value: c.name }));
+}
+
+function searchPlace() {
+  const input = $('city-input');
+  const msg = $('city-msg');
+  const q = input.value.trim();
+  if (!q) { msg.textContent = ''; return; }
+  const hit = findPlace(q, state.cities, state.data.phus);
+  if (!hit) { msg.textContent = 'I could not find that place. Try a nearby city, or use the Region list.'; return; }
+  if (hit.city) {
+    const phuName = regionName(state.data, hit.city.phu);
+    msg.textContent = `${hit.city.name} is served by ${phuName}.`;
+    input.value = hit.city.name;
+    selectRegion(hit.city.phu, false, hit.city);
+  } else {
+    msg.textContent = `Showing ${hit.phu.name}.`;
+    selectRegion(hit.phu.id, false);
+  }
+}
+
+function selectRegion(id, fromMap, city = null) {
+  if (String(id) !== String(state.regionId)) $('chat-log').replaceChildren(); // new region: start a fresh conversation
   state.regionId = id;
+  state.city = city;
+  if (state.mapApi) state.mapApi.setMarker(city);
+  if (!city) { $('city-msg').textContent = ''; if (fromMap !== undefined) $('city-input').value = ''; }
   renderAll();
   if (fromMap && window.innerWidth <= 960) $('detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
   if (fromMap) $('detail').focus({ preventScroll: true });
@@ -428,7 +461,7 @@ async function ask(q) {
   addMsg('user', q);
   let out;
   try {
-    out = answerQuestion(q, { data: state.data, regionId: state.regionId, indicator: state.ind });
+    out = answerQuestion(q, { data: state.data, regionId: state.regionId, indicator: state.ind, cities: state.cities });
   } catch (e) {
     out = { text: "I don't have that data.", source: '', examples: true, kind: 'error' };
   }

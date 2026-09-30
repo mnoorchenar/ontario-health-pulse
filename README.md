@@ -14,6 +14,10 @@ Ontario Health Pulse is an interactive, fully static dashboard for non-technical
 
 > Screenshot placeholder: add a screenshot of the dashboard here (Hugging Face Spaces rejects binary files unless Xet storage is set up).
 
+## Finding your place
+
+Type a city or town (about 150 are listed, for example Hamilton, London or Thunder Bay) in the search box. The app shows which public health unit serves it, selects that unit and drops a pin on the map; the main cities are also labelled on the map. City-to-unit assignments come from scripts/build_cities.py, which tests approximate town-centre coordinates against the official boundaries. Selecting a different region starts a fresh chat.
+
 ## What the data covers (please read)
 
 Only two official, downloadable, aggregated Ontario datasets could be used, and **both were frozen by the province on 2024-11-14**:

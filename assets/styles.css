@@ -113,6 +113,16 @@ select {
 .check { display: flex; gap: .5rem; align-items: center; font-weight: 600; font-size: .95rem; min-height: 44px; }
 .check input { width: 22px; height: 22px; accent-color: var(--primary); }
 
+/* City search and labels */
+.find { margin: .8rem 0 0; }
+.find input { font: inherit; width: 100%; padding: .55rem .7rem; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); min-height: 44px; margin-top: .2rem; }
+.find-msg { min-height: 1.4em; margin: .3rem 0 0; }
+.city-dot { fill: var(--text); stroke: var(--surface); stroke-width: 1; }
+.city-label, .marker-label { fill: var(--text); stroke: var(--surface); paint-order: stroke; stroke-linejoin: round; font-weight: 700; pointer-events: none; }
+.marker-ring { fill: var(--focus); fill-opacity: .35; stroke: var(--focus); }
+.marker-label { font-weight: 800; }
+.city-layer, .marker-layer { pointer-events: none; }
+
 /* Map */
 .map-wrap { position: relative; }
 .map { background: var(--surface-2); border-radius: 12px; overflow: hidden; }
