@@ -89,6 +89,9 @@ a { color: var(--primary); }
 .banner.ok { background: #dff3e8; color: #0d4a33; }
 :root[data-theme="dark"] .banner.ok { background: #12382b; color: #c9f1de; }
 .banner.warn { background: var(--warn-bg); color: var(--warn-text); }
+.banner:has(.banner-close) { display: flex; gap: 1rem; align-items: center; justify-content: space-between; }
+.banner-close { font: inherit; font-weight: 700; cursor: pointer; flex: none; min-height: 44px; padding: .4rem .9rem; border-radius: 8px; border: 1.5px solid currentColor; background: transparent; color: inherit; }
+.banner-close:hover { background: rgba(0, 0, 0, .08); }
 .banner.danger { background: var(--danger-bg); color: var(--danger-text); font-size: 1.15rem; letter-spacing: .02em; text-align: center; border: 2px solid currentColor; }
 .banner[hidden] { display: none; }
 

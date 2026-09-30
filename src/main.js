@@ -213,18 +213,30 @@ function renderHeader() {
   // banners
   const host = $('banners');
   host.querySelectorAll('.dyn').forEach((n) => n.remove());
-  const add = (cls, text) => {
-    const p = document.createElement('p');
+  const add = (cls, text, dismissKey) => {
+    const p = document.createElement('div');
     p.className = `banner dyn ${cls}`;
     p.setAttribute('role', cls === 'danger' ? 'alert' : 'status');
-    p.textContent = text;
+    const span = document.createElement('span');
+    span.textContent = text;
+    p.appendChild(span);
+    if (dismissKey) {
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'banner-close';
+      x.textContent = 'Close';
+      x.setAttribute('aria-label', 'Close this notice');
+      x.addEventListener('click', () => { store.set(dismissKey, '1'); p.remove(); });
+      p.appendChild(x);
+    }
     host.insertBefore(p, $('update-msg'));
   };
-  if (d.meta.synthetic) add('danger', 'SAMPLE DATA, NOT REAL');
+  if (d.meta.synthetic) add('danger', 'SAMPLE DATA, NOT REAL'); // never dismissible
   const age = daysOld(d.meta.latest_data_date);
-  if (!d.meta.synthetic && age > STALE_AFTER_DAYS) {
+  const staleKey = `ohp-hide-stale-${d.meta.latest_data_date}`; // closed notices stay closed until the data date changes
+  if (!d.meta.synthetic && age > STALE_AFTER_DAYS && !store.get(staleKey)) {
     const archived = d.meta.sources.filter((s) => /^archived/i.test(s.status || '')).length;
-    add('warn', `The newest week in this snapshot is ${formatDate(d.meta.latest_data_date)}, about ${Math.round(age / 30)} months ago.${archived ? ' The official Ontario files it uses are no longer updated, so this is a historical view.' : ''}`);
+    add('warn', `The newest week in this snapshot is ${formatDate(d.meta.latest_data_date)}, about ${Math.round(age / 30)} months ago.${archived ? ' The official Ontario files it uses are no longer updated, so this is a historical view.' : ''}`, staleKey);
   }
 }
 
