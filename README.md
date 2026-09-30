@@ -1,4 +1,4 @@
-﻿---
+---
 title: ontario-health-pulse
 colorFrom: blue
 colorTo: green
