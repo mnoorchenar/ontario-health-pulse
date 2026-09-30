@@ -37,3 +37,14 @@ test('negative and implausible numbers are rejected', () => {
 
 test('non-increasing dates are rejected', () => assert.equal(check((d) => { d.dates[5] = d.dates[4]; }).ok, false));
 test('sample data cannot replace real data', () => assert.equal(check((d) => { d.meta.synthetic = true; }).ok, false));
+
+test('optional age-group and population blocks are validated', () => {
+  assert.ok(data.age_vax && data.context);
+  assert.equal(check((d) => { d.age_vax.series.ON.dose1[0] = 300; }).ok, false);
+  assert.equal(check((d) => { d.age_vax.series['3895'].full.pop(); }).ok, false);
+  assert.equal(check((d) => { delete d.age_vax.series['2226']; }).ok, false);
+  assert.equal(check((d) => { d.context.ON.pop = 5; }).ok, false);
+  assert.equal(check((d) => { delete d.context.per_phu['2226']; }).ok, false);
+  assert.equal(check((d) => { d.context.per_phu['2226'].pct65 = 400; }).ok, false);
+  assert.equal(check((d) => { delete d.age_vax; delete d.context; }).ok, true, 'blocks are optional');
+});

@@ -213,5 +213,99 @@ class FailureLeavesFileUntouchedTests(unittest.TestCase):
         self.assertEqual(bd.main(["--synthetic"]), 1)
 
 
+
+def make_population_xlsx(bad_header=False, units=None, total=16_000_000):
+    """Tiny in-memory .xlsx with the same layout as the Ministry of Finance file."""
+    import io
+    import zipfile
+    codes = list(units if units is not None else bd.SOURCE_PHUS)
+    strings = ["YEAR (JULY 1)", "REGION CODE", "REGION NAME", "GENDER", "TOTAL", "0 to 14", "15 to 64", "65 Plus",
+               "TOTAL ALL GENDERS", "MEN+", "Some Unit"]
+    idx = {s: i for i, s in enumerate(strings)}
+    if bad_header:
+        strings[idx["65 Plus"]] = "Seniors"
+
+    def sc(ref, s):
+        return '<c r="%s" t="s"><v>%d</v></c>' % (ref, idx[s])
+
+    rows = ['<row r="5">' + sc("A5", "YEAR (JULY 1)") + sc("B5", "REGION CODE") + sc("C5", "REGION NAME") + sc("D5", "GENDER")
+            + sc("E5", "TOTAL") + sc("F5", "0 to 14") + sc("G5", "15 to 64") + sc("H5", "65 Plus") + "</row>"]
+    each = total // 34
+    for i, code in enumerate(codes, start=6):
+        rows.append('<row r="%d"><c r="A%d"><v>%d</v></c><c r="B%d"><v>%d</v></c>%s%s<c r="E%d"><v>%d</v></c>'
+                    '<c r="F%d"><v>%d</v></c><c r="G%d"><v>0</v></c><c r="H%d"><v>%d</v></c></row>'
+                    % (i, i, bd.POP_YEAR, i, code, sc("C%d" % i, "Some Unit"), sc("D%d" % i, "TOTAL ALL GENDERS"),
+                       i, each, i, each // 10, i, i, each // 5))
+    rows.append('<row r="900"><c r="A900"><v>%d</v></c><c r="B900"><v>2226</v></c>%s<c r="E900"><v>5</v></c></row>'
+                % (bd.POP_YEAR, sc("D900", "MEN+")))  # a non-total row that must be ignored
+    sheet = '<worksheet><sheetData>%s</sheetData></worksheet>' % "".join(rows)
+    sst = "<sst>%s</sst>" % "".join("<si><t>%s</t></si>" % s for s in strings)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("xl/sharedStrings.xml", sst)
+        z.writestr("xl/worksheets/sheet1.xml", sheet)
+    return buf.getvalue()
+
+
+class PopulationTests(unittest.TestCase):
+    def test_parse_and_merge(self):
+        pop = bd.parse_population(make_population_xlsx())
+        self.assertEqual(pop["year"], bd.POP_YEAR)
+        self.assertEqual(sorted(pop["per_phu"]), sorted(str(i) for i in bd.CURRENT_PHUS))
+        each = 16_000_000 // 34
+        self.assertEqual(pop["per_phu"]["2226"]["pop"], each)
+        self.assertEqual(pop["per_phu"]["7652"]["pop"], 2 * each)      # Brant + Haldimand-Norfolk
+        self.assertEqual(pop["per_phu"]["7655"]["pop"], 3 * each)      # three units merged into Southeast
+        self.assertAlmostEqual(pop["ON"]["pct65"], 20.0, places=1)
+
+    def test_bad_header_rejected(self):
+        with self.assertRaises(bd.ValidationError):
+            bd.parse_population(make_population_xlsx(bad_header=True))
+
+    def test_missing_unit_rejected(self):
+        with self.assertRaises(bd.ValidationError):
+            bd.parse_population(make_population_xlsx(units=list(bd.SOURCE_PHUS)[:-1]))
+
+    def test_implausible_total_rejected(self):
+        with self.assertRaises(bd.ValidationError):
+            bd.parse_population(make_population_xlsx(total=1_000_000))
+
+    def test_not_an_excel_file_rejected(self):
+        with self.assertRaises(bd.ValidationError):
+            bd.parse_population(b"<html>not excel</html>")
+
+
+class AgeGroupTests(unittest.TestCase):
+    def test_masking_capping_and_merging(self):
+        ids = sorted(bd.CURRENT_PHUS)
+        age = {(2226, "80+"): [3.0, 900.0, 950.0, 1000.0],       # 3 people with a dose -> masked
+               (2230, "80+"): [1200.0, 800.0, 100.0, 1000.0]}    # over 100% of the 2021 population -> capped
+        out = bd.build_age_vax(dt.date(2024, 11, 6), age, ids)
+        g = out["groups"].index("80+")
+        self.assertIsNone(out["series"]["2226"]["dose1"][g])
+        self.assertEqual(out["series"]["2226"]["full"][g], 90.0)
+        self.assertEqual(out["series"]["2230"]["dose1"][g], 100.0)
+        self.assertEqual(out["series"]["2230"]["dose3"][g], 10.0)
+        self.assertIsNone(out["series"]["2253"]["dose1"][g])       # no population -> no value
+        self.assertEqual(out["date"], "2024-11-06")
+
+    def test_document_validation_covers_new_blocks(self):
+        doc = bd.build_synthetic(today=dt.date(2025, 1, 15))
+        ids = sorted(bd.CURRENT_PHUS)
+        age = {(pid, g): [500.0, 400.0, 300.0, 1000.0] for pid in ids for _, g in bd.AGE_GROUPS}
+        doc["age_vax"] = bd.build_age_vax(dt.date(2025, 1, 15), age, ids)
+        doc["context"] = bd.parse_population(make_population_xlsx())
+        self.assertEqual(bd.validate_document(doc), [])
+        bad = copy.deepcopy(doc)
+        bad["age_vax"]["series"]["ON"]["dose1"][0] = 250
+        self.assertTrue(bd.validate_document(bad))
+        bad = copy.deepcopy(doc)
+        bad["context"]["ON"]["pop"] = 5
+        self.assertTrue(bd.validate_document(bad))
+        bad = copy.deepcopy(doc)
+        del bad["context"]["per_phu"]["3895"]
+        self.assertTrue(bd.validate_document(bad))
+
+
 if __name__ == "__main__":
     unittest.main()

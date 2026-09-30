@@ -96,3 +96,51 @@ export function renderTrend(canvas, o) {
 export function destroyChart() {
   if (chart) { chart.destroy(); chart = null; }
 }
+
+let ageChart = null;
+
+/** Grouped bars by age group for the region, with the Ontario "at least one dose" value as markers. */
+export function renderAgeVax(canvas, o) {
+  if (typeof Chart === 'undefined') return false;
+  const primary = css('--primary');
+  const accent = css('--accent');
+  const muted = css('--muted');
+  const text = css('--text');
+  const grid = css('--border');
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const datasets = [
+    { type: 'bar', label: 'At least one dose', data: o.region.dose1, backgroundColor: withAlpha(primary, 0.4), borderColor: primary, borderWidth: 1.5, order: 2 },
+    { type: 'bar', label: 'Fully vaccinated', data: o.region.full, backgroundColor: withAlpha(primary, 0.85), borderColor: primary, borderWidth: 1.5, order: 2 },
+    { type: 'bar', label: '3 or more doses', data: o.region.dose3, backgroundColor: accent, borderColor: accent, borderWidth: 1.5, order: 2 },
+  ];
+  if (!o.isOntario) {
+    datasets.push({ type: 'line', label: 'Ontario: at least one dose', data: o.ontario.dose1, showLine: false, pointStyle: 'rectRot', pointRadius: 6, pointBorderWidth: 2, borderColor: text, backgroundColor: css('--surface'), order: 1 });
+  }
+  const cfg = {
+    type: 'bar',
+    data: { labels: o.groups, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: reduce ? 0 : 450 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { color: muted, font: { size: 13 }, boxWidth: 12 } },
+        tooltip: {
+          titleFont: { size: 14 }, bodyFont: { size: 14 },
+          callbacks: {
+            title: (items) => (items[0] ? `Ages ${items[0].label}` : ''),
+            label: (i) => `${i.dataset.label}: ${i.parsed.y == null ? 'no data' : `${i.parsed.y.toFixed(1)}%`}`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: muted, font: { size: 13 } }, grid: { display: false }, title: { display: true, text: 'Age group', color: muted } },
+        y: { beginAtZero: true, max: 100, ticks: { color: muted, font: { size: 13 }, callback: (v) => `${v}%` }, grid: { color: grid } },
+      },
+    },
+  };
+  if (ageChart) ageChart.destroy();
+  ageChart = new Chart(canvas, cfg);
+  return true;
+}

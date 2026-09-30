@@ -147,3 +147,40 @@ test('facts block and grounding check for the optional model', () => {
   assert.equal(numbersAreGrounded('It was ' + formatValue(l.value, 'pos', data), facts), true);
   assert.equal(numbersAreGrounded('It was 77.7%', facts), false);
 });
+
+test('population question uses the population block', () => {
+  const a = ask('How many people live in Hamilton?');
+  assert.equal(a.kind, 'population');
+  assert.match(a.text, /Hamilton Public Health Services has about/);
+  assert.match(a.text, /aged 65 or older/);
+  assert.match(a.source, /Population estimate for 2025/);
+  const v = data.context.per_phu['2237'];
+  assert.ok(a.text.includes(v.pct65.toFixed(1) + '%'));
+});
+
+test('age-group vaccination answers come from the age table', () => {
+  const av = data.age_vax;
+  const seniors = ask('What is vaccination coverage for seniors in Toronto?');
+  assert.equal(seniors.kind, 'agegroup');
+  const v = av.series['3895'].dose1[av.groups.indexOf('80+')];
+  assert.ok(seniors.text.includes('80+') && seniors.text.includes(v.toFixed(1) + '%'), seniors.text);
+  const kids = ask('booster for children');
+  assert.match(kids.text, /5-11/);
+  const overview = ask('How does vaccination differ by age group?');
+  assert.match(overview.text, /highest for ages .* and lowest for ages/);
+  assert.match(overview.source, /Data as of 6 Nov 2024/);
+});
+
+test('age words do not hijack test positivity questions', () => {
+  assert.notEqual(ask('test positivity for adults').kind, 'agegroup');
+});
+
+test('new answers only contain declared numbers', () => {
+  for (const q of ['How many people live in Peel?', 'coverage for seniors', 'booster for 60s', 'vaccination by age group']) {
+    const a = ask(q);
+    const declared = a.numbers.join(' | ');
+    for (const t of a.text.replace(/COVID-19|3 or more|aged 65|aged 0 to 14/gi, '').match(/\d[\d,]*\.?\d*/g) || []) {
+      assert.ok(declared.includes(t.replace(/[.,]$/, '')), `${q}: ${t} not in [${declared}]\n${a.text}`);
+    }
+  }
+});

@@ -60,6 +60,32 @@ export function validateSnapshot(doc, known, current = null) {
   }
   if (points < 1000) fail('suspiciously little data');
 
+  // optional blocks: vaccination by age group and population context
+  if (doc.age_vax !== undefined) {
+    const av = doc.age_vax;
+    const ok = av && Array.isArray(av.groups) && av.groups.length > 0 && typeof av.date === 'string' && ISO.test(av.date) && av.series;
+    if (!ok || Object.keys(av.series).length !== wanted.length || !wanted.every((k) => k in av.series)) fail('age-group data does not match the public health unit list');
+    else {
+      outerAge: for (const k of wanted) {
+        for (const m of ['dose1', 'full', 'dose3']) {
+          const v = av.series[k][m];
+          if (!Array.isArray(v) || v.length !== av.groups.length || v.some((x) => x !== null && (typeof x !== 'number' || !Number.isFinite(x) || x < 0 || x > 100))) { fail('age-group data has invalid numbers'); break outerAge; }
+        }
+      }
+    }
+  }
+  if (doc.context !== undefined) {
+    const c = doc.context;
+    const okc = c && c.per_phu && c.ON && known.ids.every((i) => c.per_phu[String(i)]);
+    if (!okc) fail('population data does not match the public health unit list');
+    else {
+      for (const [k, v] of [...Object.entries(c.per_phu), ['ON', c.ON]]) {
+        if (!(v.pop > 0) || !(v.pct65 >= 0 && v.pct65 <= 100) || !(v.pct0_14 >= 0 && v.pct0_14 <= 100)) { fail(`population data for ${k} is implausible`); break; }
+      }
+      if (!(c.ON.pop >= 14e6 && c.ON.pop <= 18e6)) fail('Ontario population is implausible');
+    }
+  }
+
   // never silently swap real data for sample data
   if (current && !errors.length) {
     if (meta.latest_data_date < current.meta.latest_data_date) fail(`the new data (${meta.latest_data_date}) is older than what is shown (${current.meta.latest_data_date})`);

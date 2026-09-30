@@ -26,6 +26,8 @@ Only two official, downloadable, aggregated Ontario datasets could be used, and 
 |---|---|
 | COVID-19 test positivity by PHU (7-day average) | 2024-07-31 |
 | Vaccination coverage: at least one dose / 3+ doses, ages 5+ | 2024-11-06 |
+| Vaccination by age group (5-11 up to 80+): at least one dose, fully vaccinated, 3+ doses | 2024-11-06 (latest week only) |
+| Population, share aged 65+ and 0-14 (context, not used in rates) | July 1, 2025 estimate |
 
 The app therefore shows a **historical view** and says so in a banner. It does not include influenza, RSV or hospital data: see "Sources" for why. Forecasts continue from the last week of data, not from today.
 
@@ -82,6 +84,7 @@ The default chat is rules-based: keyword and intent matching over the loaded dat
 | COVID-19 testing metrics by PHU | Ontario Data Catalogue: [Ontario COVID-19 testing metrics by Public Health Unit (PHU)](https://data.ontario.ca/dataset/ontario-covid-19-testing-metrics-by-public-health-unit-phu) | [Open Government Licence - Ontario](https://www.ontario.ca/page/open-government-licence-ontario) |
 | Vaccination coverage by PHU | Ontario Data Catalogue: [COVID-19 Vaccine Data in Ontario](https://data.ontario.ca/dataset/covid-19-vaccine-data-in-ontario) (file "by PHU and age group") | Open Government Licence - Ontario |
 | PHU boundaries (map shapes) | Ontario Ministry of Health, Land Information Ontario: [Public health unit boundaries](https://data.ontario.ca/dataset/public-health-unit-boundaries), current 29-unit layer. Simplified to about 75 KB for display only. | Open Government Licence - Ontario |
+| Population by unit | Ontario Data Catalogue: [Population projections](https://data.ontario.ca/dataset/population-projections) (Ministry of Finance, using Statistics Canada estimates), 34-unit Excel file, 2025 column, merged to the 29 current units | Open Government Licence - Ontario |
 | Chart.js 4.5.1 | [chartjs.org](https://www.chartjs.org) | MIT (`vendor/chart.js.LICENSE.md`) |
 
 Contains information licensed under the Open Government Licence - Ontario. The code is MIT licensed (see `LICENSE`).
@@ -90,6 +93,8 @@ Sources that were checked but not used:
 
 - **Public Health Ontario, Ontario Respiratory Virus Tool** (COVID-19, influenza and RSV by PHU): the tool is a Power BI embed. Its CSV export buttons run inside the report and there is no stable file URL to download. Scraping the report was ruled out. If PHO publishes a stable data file, add a parser in `scripts/build_data.py`. Its terms of use are at publichealthontario.ca and should be reviewed before reuse.
 - **PHO immunization coverage data**: the page I tried returned 404; the Ontario Data Catalogue vaccine file above was used instead.
+- **Ontario flu shot clinics** (city-level clinic list, listed as updated daily): the file URL in the catalogue currently answers with an HTML "404 Not Found" page, so it could not be used. Worth rechecking in flu season.
+- **Other Ontario catalogue COVID files** (cases and outbreaks by unit, hospital and ICU by Ontario Health region): same licence but frozen in 2023-2024 and add little beyond what is shown, so they were not added.
 - **Ontario open data "Weekly influenza activity level within PHUs"**: listed in the catalogue but marked "not available"; the ministry says it is still reviewing whether it can be opened.
 
 Public health units that merged on 1 January 2025 (Brant + Haldimand-Norfolk = Grand Erie; Haliburton Kawartha Pine Ridge + Peterborough = Lakelands; Porcupine + Timiskaming = Northeastern; Hastings Prince Edward + Kingston Frontenac Lennox & Addington + Leeds Grenville Lanark = Southeast) are combined for the whole history. Rates are recomputed from combined counts, not averaged.
@@ -102,6 +107,8 @@ Public health units that merged on 1 January 2025 (Brant + Haldimand-Norfolk = G
 - The forecast is a simple exponential-smoothing estimate. It cannot anticipate new variants, policy changes or reporting changes.
 - The map shapes are simplified and are not for legal or analytic use.
 - No influenza, RSV or hospital data (source not downloadable).
+- **No city-level health figures.** No Ontario open dataset publishes them. A city always shows the figures of the public health unit that serves it, and the app says so. Some cities (for example Toronto and Ottawa) publish neighbourhood data on their own portals; those are not included.
+- Age-group coverage above 100% (seniors) is capped at 100%, as in the source, because population estimates are from 2021.
 
 ## Privacy and safety
 

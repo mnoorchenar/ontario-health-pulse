@@ -17,6 +17,8 @@ export const EXAMPLES = [
   'Is the trend going up or down?',
   'When was the data last updated?',
   'What does test positivity mean?',
+  'How does vaccination differ by age group?',
+  'How many people live here?',
 ];
 
 const GENERIC = new Set(['public', 'health', 'unit', 'region', 'regional', 'of', 'the', 'and', 'district', 'department', 'services', 'paramedic', 'county', 'ontario']);
@@ -171,6 +173,57 @@ export function answerQuestion(question, ctx) {
         return finish('definition', null);
       }
     }
+  }
+
+  // population and age profile
+  if (has(q, /\b(population|how many people|people live|residents|inhabitants|how big|how large|elderly share|share of seniors)\b/)) {
+    const c = data.context;
+    const v = c && (String(regionId) === 'ON' ? c.ON : c.per_phu[String(regionId)]);
+    if (!v) { a.say(NO_DATA); return finish('population', null, false, true); }
+    const n = v.pop >= 1e6 ? `${(v.pop / 1e6).toFixed(1)} million` : v.pop.toLocaleString('en-CA');
+    a.say(`${pre}${name} has about ${a.num(n)} people (${a.num(String(c.year))} estimate). ${a.num(v.pct65.toFixed(1) + '%')} are aged 65 or older and ${a.num(v.pct0_14.toFixed(1) + '%')} are aged 0 to 14.`);
+    const src = data.meta.sources.find((x) => x.id === 'population');
+    const out = finish('population', null);
+    out.source = `Population estimate for ${c.year}. Source: ${src ? src.name : 'Ontario Ministry of Finance'}.`;
+    return out;
+  }
+
+  // vaccination by age group
+  if (data.age_vax && has(q, /\b(age group|age groups|by age|seniors?|elderly|older (adults|people)|children|kids|teens?|teenagers?|youth|young (adults|people)|adults|\d0s|aged \d+|80|5 11|12 17)\b/) && !has(q, /\b(positiv\w*|tests?|testing)\b/)) {
+    const av = data.age_vax;
+    const series = av.series[String(regionId)];
+    const wanted = [];
+    const add = (g) => { if (av.groups.includes(g) && !wanted.includes(g)) wanted.push(g); };
+    if (has(q, /\b(seniors?|elderly|older (adults|people))\b/)) { add('70-79'); add('80+'); }
+    if (has(q, /\b(children|kids)\b/)) add('5-11');
+    if (has(q, /\b(teens?|teenagers?|youth)\b/)) add('12-17');
+    if (has(q, /\b(young (adults|people))\b/)) add('18-29');
+    for (const g of av.groups) { if (q.includes(` ${g.replace('-', ' ').replace('+', '')} `) ) add(g); }
+    const m = q.match(/\b(\d)0s\b/);
+    if (m) add(`${m[1]}0-${m[1]}9`);
+    const dose = has(q, /\b(booster|3 doses?|three doses?|third)\b/) ? 'dose3' : 'dose1';
+    const doseLabel = dose === 'dose3' ? '3 or more doses' : 'at least one dose';
+    const fmt = (v) => (v == null ? null : a.num(`${v.toFixed(1)}%`));
+    const when = a.num(formatDate(av.date));
+    if (wanted.length) {
+      const parts = wanted.map((g) => {
+        const v = series[dose][av.groups.indexOf(g)];
+        const o = av.series.ON[dose][av.groups.indexOf(g)];
+        return v == null ? null : `${a.num(g)}: ${fmt(v)}${String(regionId) !== 'ON' && o != null ? ` (Ontario ${fmt(o)})` : ''}`;
+      }).filter(Boolean);
+      if (!parts.length) { a.say(`${NO_DATA} There is no value for that age group in ${name}.`); return finish('agegroup', 'vax1', false, true); }
+      a.say(`${pre}In ${name}, the share with ${doseLabel} in the week of ${when} was: ${parts.join('; ')}.`);
+    } else {
+      const pairs = av.groups.map((g, i) => [g, series[dose][i]]).filter((x) => x[1] != null).sort((x, y) => y[1] - x[1]);
+      if (pairs.length < 2) { a.say(NO_DATA); return finish('agegroup', 'vax1', false, true); }
+      const hi = pairs[0];
+      const lo = pairs[pairs.length - 1];
+      a.say(`${pre}In ${name}, coverage with ${doseLabel} in the week of ${when} was highest for ages ${a.num(hi[0])} (${fmt(hi[1])}) and lowest for ages ${a.num(lo[0])} (${fmt(lo[1])}). The chart on this page shows every age group.`);
+    }
+    if (/100\.0%/.test(a.parts.join(' '))) a.say(`Coverage is capped at ${a.num('100%')} because population estimates are from ${a.num('2021')}.`);
+    const out = finish('agegroup', 'vax1');
+    out.source = `Data as of ${formatDate(av.date)}. Source: ${sourceFor(data, 'vax1')}.${data.meta.synthetic ? ' SAMPLE DATA, NOT REAL.' : ''}`;
+    return out;
   }
 
   // ranking: highest / lowest

@@ -103,8 +103,18 @@ UNKNOWN_VACCINE_ROW = (9999, "UNKNOWN")  # doses with no PHU recorded; never sho
 
 TESTING_COLUMNS = ["DATE", "PHU_num", "PHU_name", "percent_positive_7d_avg", "test_volumes_7d_avg"]
 VACCINE_COLUMNS = ["Date", "PHU ID", "PHU name", "Agegroup", "At least one dose_cumulative",
-                   "third_dose_cumulative", "Total population", "Percent_at_least_one_dose", "Percent_3doses"]
+                   "fully_vaccinated_cumulative", "third_dose_cumulative", "Total population",
+                   "Percent_at_least_one_dose", "Percent_3doses"]
 VACCINE_AGEGROUP = "Ontario_5plus"
+# Age groups shown in the "vaccination by age group" chart: source label -> display label
+AGE_GROUPS = [("05-11yrs", "5-11"), ("12-17yrs", "12-17"), ("18-29yrs", "18-29"), ("30-39yrs", "30-39"),
+              ("40-49yrs", "40-49"), ("50-59yrs", "50-59"), ("60-69yrs", "60-69"), ("70-79yrs", "70-79"),
+              ("80+", "80+")]
+AGE_SOURCE = dict(AGE_GROUPS)
+AGE_MEASURES = ["dose1", "full", "dose3"]
+POPULATION_URL = ("https://data.ontario.ca/dataset/f52a6457-fb37-4267-acde-11a1e57c4dc8/resource/"
+                  "22740a28-420b-4b90-bd45-6bee22b6072c/download/34_public_health_units_mof_population_projections_2025-2051.xlsx")
+POP_YEAR = 2025  # July 1 estimate (Statistics Canada based); later years in the file are projections
 MIN_TESTING_ROWS = 30000
 MIN_VACCINE_ROWS = 300000
 MAX_DAILY_TESTS = 200000  # plausibility ceiling for province-wide 7-day average daily tests
@@ -224,12 +234,30 @@ def parse_vaccine(text):
 
 
 def _parse_vaccine(text):
-    """Return (rows_read, {(phu_id, date): [dose1_sum, dose3_sum, pop_sum]}, checks[(pid, date, pct1, pct3, d1, d3, pop)])."""
+    """Return (rows_read, {(phu_id, date): [dose1_sum, dose3_sum, pop_sum]}, checks, (age_date, age)).
+
+    `age` holds, for the latest date only, {(current_phu_id, age_label): [dose1, full, dose3, population]}."""
     reader = csv.DictReader(io.StringIO(text))
     check_columns(reader.fieldnames or [], VACCINE_COLUMNS, "vaccine file")
     acc, checks, n = {}, [], 0
+    age, age_date = {}, None
     for row in reader:
         n += 1
+        if row["Agegroup"] in AGE_SOURCE:
+            d = parse_date(row["Date"])
+            if age_date is None or d > age_date:
+                age_date, age = d, {}
+            if d == age_date:
+                pid, name = int(row["PHU ID"]), row["PHU name"].strip()
+                if pid in SOURCE_PHUS and SOURCE_PHUS[pid][1] == name:
+                    vals = [parse_number(row["At least one dose_cumulative"]), parse_number(row["fully_vaccinated_cumulative"]),
+                            parse_number(row["third_dose_cumulative"]), parse_number(row["Total population"])]
+                    if None in vals or min(vals) < 0:
+                        raise ValidationError("vaccine file: missing or negative age-group count on %s for %s" % (d, name))
+                    a = age.setdefault((MERGED_INTO.get(pid, pid), AGE_SOURCE[row["Agegroup"]]), [0.0, 0.0, 0.0, 0.0])
+                    for i, v in enumerate(vals):
+                        a[i] += v
+            continue
         if row["Agegroup"] != VACCINE_AGEGROUP:
             continue
         pid, name = int(row["PHU ID"]), row["PHU name"].strip()
@@ -250,7 +278,112 @@ def _parse_vaccine(text):
         if pid not in MERGED_INTO:
             checks.append((pid, d, parse_number(row["Percent_at_least_one_dose"]),
                            parse_number(row["Percent_3doses"]), d1, d3, pop))
-    return n, acc, checks
+    return n, acc, checks, (age_date, age)
+
+
+# ---------------------------------------------------------------------------------------------
+# Population (Ontario Ministry of Finance projections, xlsx read with the standard library)
+# ---------------------------------------------------------------------------------------------
+def download_bytes(url, cache_dir=None, label="file"):
+    cache = Path(cache_dir) / (label + ".bin") if cache_dir else None
+    if cache and cache.exists():
+        return cache.read_bytes()
+    last = None
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "ontario-health-pulse-build/1.0"})
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                raw = resp.read()
+            if raw[:2] != b"PK":
+                raise ValidationError("%s: server did not return an Excel file" % label)
+            if cache:
+                cache.parent.mkdir(parents=True, exist_ok=True)
+                cache.write_bytes(raw)
+            return raw
+        except Exception as exc:
+            last = exc
+    raise RuntimeError("Could not download %s (%s): %s" % (label, url, last))
+
+
+def _xlsx_rows(data):
+    import re
+    import zipfile
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+        strings = [re.sub(r"<[^>]+>", "", x).replace("&amp;", "&") for x in
+                   re.findall(r"<si>(.*?)</si>", z.read("xl/sharedStrings.xml").decode("utf-8"), re.S)]
+        sheet = z.read("xl/worksheets/sheet1.xml").decode("utf-8")
+    except Exception as exc:
+        raise ValidationError("population file could not be read as Excel: %s" % exc)
+    rows = []
+    for rowxml in re.findall(r"<row [^>]*>(.*?)</row>", sheet, re.S):
+        cells = {}
+        for m in re.finditer(r'<c r="([A-Z]+)\d+"([^>]*?)(?:/>|>(.*?)</c>)', rowxml, re.S):
+            col, attrs, inner = m.groups()
+            v = re.search(r"<v>(.*?)</v>", inner or "")
+            if v:
+                cells[col] = strings[int(v.group(1))] if 't="s"' in attrs else v.group(1)
+        rows.append(cells)
+    return rows
+
+
+def parse_population(data):
+    """Return {"year": int, "per_phu": {"<id>": {pop, pct65, pct0_14}}, "ON": {...}} on today's 29 units."""
+    rows = _xlsx_rows(data)
+    head = next((r_ for r_ in rows if r_.get("A") == "YEAR (JULY 1)"), None)
+    if not head or (head.get("B"), head.get("D"), head.get("E"), head.get("F"), head.get("H")) != \
+            ("REGION CODE", "GENDER", "TOTAL", "0 to 14", "65 Plus"):
+        raise ValidationError("population file: expected columns not found")
+    acc, seen = {}, set()
+    for r_ in rows:
+        if r_.get("A") != str(POP_YEAR) or r_.get("D") != "TOTAL ALL GENDERS":
+            continue
+        code = int(r_["B"])
+        if code not in SOURCE_PHUS:
+            raise ValidationError("population file: unknown public health unit code %r" % code)
+        seen.add(code)
+        vals = [float(r_["E"]), float(r_["F"]), float(r_["H"])]
+        if min(vals) < 0 or vals[0] <= 0 or vals[1] + vals[2] > vals[0] * 1.001:
+            raise ValidationError("population file: implausible numbers for unit %d" % code)
+        a = acc.setdefault(MERGED_INTO.get(code, code), [0.0, 0.0, 0.0])
+        for i, v in enumerate(vals):
+            a[i] += v
+    if seen != set(SOURCE_PHUS):
+        raise ValidationError("population file: expected %d units for %d, found %d" % (len(SOURCE_PHUS), POP_YEAR, len(seen)))
+    total = [sum(a[i] for a in acc.values()) for i in range(3)]
+    if not 14e6 <= total[0] <= 18e6:
+        raise ValidationError("population file: Ontario total %.0f is implausible" % total[0])
+
+    def row(a):
+        return {"pop": int(round(a[0])), "pct0_14": round(100 * a[1] / a[0], 1), "pct65": round(100 * a[2] / a[0], 1)}
+    return {"year": POP_YEAR, "per_phu": {str(k): row(v) for k, v in sorted(acc.items())}, "ON": row(total)}
+
+
+def build_age_vax(age_date, age, ids):
+    """Latest-week vaccination by age group. Counts of 1-4 are masked; percentages are capped at 100 like the source."""
+    groups = [g for _, g in AGE_GROUPS]
+
+    def pct(num, pop):
+        num = suppress_small_count(num)
+        return None if num is None or pop <= 0 else round(min(100.0, 100 * num / pop), 1)
+
+    series, tot = {}, {g: [0.0, 0.0, 0.0, 0.0] for g in groups}
+    for pid in ids:
+        s_ = {m: [] for m in AGE_MEASURES}
+        for g in groups:
+            a = age.get((pid, g), [0.0, 0.0, 0.0, 0.0])
+            for i, m in enumerate(AGE_MEASURES):
+                s_[m].append(pct(a[i], a[3]))
+            for i in range(4):
+                tot[g][i] += a[i]
+        series[str(pid)] = s_
+    series["ON"] = {m: [pct(tot[g][i], tot[g][3]) for g in groups] for i, m in enumerate(AGE_MEASURES)}
+    return {
+        "date": age_date.isoformat(), "groups": groups,
+        "measures": {"dose1": "At least one dose", "full": "Fully vaccinated (primary series)", "dose3": "3 or more doses"},
+        "note": "Coverage is capped at 100% (as in the source) because population estimates are from 2021.",
+        "series": series,
+    }
 
 
 # ---------------------------------------------------------------------------------------------
@@ -260,10 +393,10 @@ def r(x, nd):
     return None if x is None else round(x, nd)
 
 
-def build_document(testing_text, vaccine_text, today=None):
+def build_document(testing_text, vaccine_text, today=None, population=None):
     today = today or dt.date.today()
     t_rows, t_acc, t_ont = parse_testing(testing_text)
-    v_rows, v_acc, v_checks = parse_vaccine(vaccine_text)
+    v_rows, v_acc, v_checks, (age_date, age) = parse_vaccine(vaccine_text)
     if t_rows < MIN_TESTING_ROWS:
         raise ValidationError("testing file has only %d rows (expected at least %d)" % (t_rows, MIN_TESTING_ROWS))
     if v_rows < MIN_VACCINE_ROWS:
@@ -399,6 +532,21 @@ def build_document(testing_text, vaccine_text, today=None):
         "dates": [d.isoformat() for d in grid],
         "series": series,
     }
+    if age_date is not None and age:
+        doc["age_vax"] = build_age_vax(age_date, age, ids)
+        doc["meta"]["notes"].append("The age-group chart shows the latest week only. Coverage is capped at 100%, "
+                                    "as in the source, because population estimates are from 2021.")
+    if population:
+        doc["context"] = population
+        doc["meta"]["sources"].insert(2, {
+            "id": "population", "name": "Ontario population projections by public health unit (Ministry of Finance)",
+            "publisher": "Ontario Ministry of Finance, using Statistics Canada estimates",
+            "url": "https://data.ontario.ca/dataset/population-projections",
+            "license": "Open Government Licence - Ontario",
+            "license_url": "https://www.ontario.ca/page/open-government-licence-ontario",
+            "status": "Population context for %d (July 1)" % population["year"]})
+        doc["meta"]["notes"].append("Population figures are July 1, %d estimates for each unit; they give context "
+                                    "and are not used to calculate the rates." % population["year"])
     return doc
 
 
@@ -463,6 +611,34 @@ def validate_document(doc, existing=None, boundaries_path=BOUNDARIES):
     non_null = sum(1 for s in series.values() for ind in INDICATORS for v in (s.get(ind) or []) if v is not None)
     if non_null < 1000:
         errs.append("only %d data points in total (suspiciously few)" % non_null)
+    av = doc.get("age_vax")
+    if av is not None:
+        try:
+            n_g = len(av["groups"])
+            if sorted(av["series"]) != sorted(["ON"] + [str(i) for i in CURRENT_PHUS]):
+                errs.append("age_vax series keys do not match the PHU list plus ON")
+            for key, s_ in av["series"].items():
+                for m in AGE_MEASURES:
+                    vals = s_[m]
+                    if len(vals) != n_g or any(v is not None and (not isinstance(v, (int, float)) or v < 0 or v > 100) for v in vals):
+                        errs.append("age_vax %s.%s has invalid values" % (key, m))
+                        break
+            dt.date.fromisoformat(av["date"])
+        except (KeyError, TypeError, ValueError):
+            errs.append("age_vax block is malformed")
+    ctx = doc.get("context")
+    if ctx is not None:
+        try:
+            if sorted(ctx["per_phu"]) != sorted(str(i) for i in CURRENT_PHUS):
+                errs.append("context does not cover the known PHU list")
+            for key, c in list(ctx["per_phu"].items()) + [("ON", ctx["ON"])]:
+                if c["pop"] <= 0 or not (0 <= c["pct65"] <= 100 and 0 <= c["pct0_14"] <= 100):
+                    errs.append("context %s has implausible values" % key)
+                    break
+            if not 14e6 <= ctx["ON"]["pop"] <= 18e6:
+                errs.append("context Ontario population is implausible")
+        except (KeyError, TypeError):
+            errs.append("context block is malformed")
     if boundaries_path and Path(boundaries_path).exists():
         try:
             bids = sorted(f["properties"]["id"] for f in json.loads(Path(boundaries_path).read_text("utf-8"))["features"])
@@ -567,6 +743,7 @@ def main(argv=None):
     ap.add_argument("--out", default=str(DEFAULT_OUT))
     ap.add_argument("--testing-file", help="use a local testing CSV instead of downloading")
     ap.add_argument("--vaccine-file", help="use a local vaccine CSV instead of downloading")
+    ap.add_argument("--population-file", help="use a local population xlsx instead of downloading")
     ap.add_argument("--cache-dir", help="reuse/keep downloaded CSVs in this folder")
     ap.add_argument("--synthetic", action="store_true", help="write clearly labelled synthetic sample data")
     ap.add_argument("--force-synthetic", action="store_true", help="allow --synthetic to target data/data.json")
@@ -590,7 +767,15 @@ def main(argv=None):
                 download_text(TESTING_URL, args.cache_dir, "testing_metrics_by_phu")
             v = Path(args.vaccine_file).read_text("utf-8-sig") if args.vaccine_file else \
                 download_text(VACCINE_URL, args.cache_dir, "vaccines_by_age_phu")
-            doc = build_document(t, v)
+            population = None
+            try:  # population is optional context: if it fails, keep what the existing file already has
+                pdata = Path(args.population_file).read_bytes() if args.population_file else \
+                    download_bytes(POPULATION_URL, args.cache_dir, "population_projections")
+                population = parse_population(pdata)
+            except (ValidationError, RuntimeError) as exc:
+                print("WARNING: population data not updated (%s)." % exc, file=sys.stderr)
+                population = (existing or {}).get("context")
+            doc = build_document(t, v, population=population)
         errors = validate_document(doc, existing)
         if errors:
             raise ValidationError("; ".join(errors))

@@ -10,7 +10,7 @@ import { forecast, FORECAST_EXPLAINER } from './forecast.js';
 import { summarize } from './summary.js';
 import { answerQuestion, EXAMPLES } from './chat.js';
 import { createMap, rampColor, rampGradient, NO_DATA_FILL } from './map.js';
-import { renderTrend } from './charts.js';
+import { renderTrend, renderAgeVax } from './charts.js';
 import { findPlace } from './cities.js';
 import { connect, disconnect, askModel, llmReady } from './llm.js';
 
@@ -336,6 +336,9 @@ function renderDetail() {
   const phu = d.phus.find((p) => p.id === id);
   $('detail-sub').textContent = isON ? 'Province-wide figures. Choose a region on the map or in the list.'
     : phu && phu.merged_from && phu.merged_from.length ? 'Formed on 1 January 2025 from earlier units; earlier history is combined.' : 'Public health unit';
+  if (state.city && !isON) $('detail-sub').textContent = `${state.city.name} is served by this public health unit. The figures are for the whole unit, not for ${state.city.name} alone.`;
+  renderContext();
+  renderAgeVaxSection();
   document.querySelectorAll('#ind-tabs .seg-btn').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ind === ind)));
   $('chat-h').textContent = `Ask about ${name}`;
 
@@ -420,6 +423,51 @@ function renderDetail() {
   ct.append(ch, cb);
 
   renderChatMeta();
+}
+
+function renderContext() {
+  const c = state.data.context;
+  const el = $('context');
+  if (!c) { el.textContent = ''; return; }
+  const v = String(state.regionId) === 'ON' ? c.ON : c.per_phu[String(state.regionId)];
+  if (!v) { el.textContent = ''; return; }
+  el.textContent = `Population about ${formatPopulation(v.pop)} (${c.year} estimate). ${v.pct65.toFixed(1)}% are aged 65 or older; ${v.pct0_14.toFixed(1)}% are aged 0 to 14.`;
+}
+
+function formatPopulation(n) {
+  return n >= 1e6 ? `${(n / 1e6).toFixed(1)} million` : n.toLocaleString('en-CA');
+}
+
+function renderAgeVaxSection() {
+  const d = state.data;
+  const sec = $('agevax-sec');
+  const av = d.age_vax;
+  if (!av) { sec.hidden = true; return; }
+  sec.hidden = false;
+  const id = String(state.regionId);
+  const isON = id === 'ON';
+  const reg = av.series[id];
+  const name = regionName(d, state.regionId);
+  $('agevax-sub').textContent = `${name}, week of ${formatDate(av.date)}. Bars show the share of people in each age group. ${av.note}`;
+  const ok = renderAgeVax($('agevax-chart'), { groups: av.groups, region: reg, ontario: av.series.ON, regionName: name, isOntario: isON });
+  $('agevax-chart').setAttribute('aria-label', `Bar chart of vaccination by age group for ${name}. A table follows.`);
+  const t = $('agevax-table');
+  t.replaceChildren();
+  const head = document.createElement('thead');
+  const hr = document.createElement('tr');
+  hr.append(th('Age group', '', 'col'), th('At least one dose', 'num', 'col'), th('Fully vaccinated', 'num', 'col'), th('3 or more doses', 'num', 'col'));
+  if (!isON) hr.append(th('Ontario: at least one dose', 'num', 'col'));
+  head.append(hr);
+  const body = document.createElement('tbody');
+  const f = (v) => (v == null ? 'no data' : `${v.toFixed(1)}%`);
+  av.groups.forEach((g, i) => {
+    const r = document.createElement('tr');
+    r.append(th(g, '', 'row'), td(f(reg.dose1[i]), 'num'), td(f(reg.full[i]), 'num'), td(f(reg.dose3[i]), 'num'));
+    if (!isON) r.append(td(f(av.series.ON.dose1[i]), 'num'));
+    body.append(r);
+  });
+  t.append(head, body);
+  if (!ok) sec.hidden = true;
 }
 
 // ---------------------------------------------------------------------------------------------

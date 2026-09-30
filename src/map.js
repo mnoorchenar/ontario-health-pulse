@@ -70,7 +70,7 @@ export function createMap(container, geojson, { onSelect, tooltip }) {
   container.replaceChildren(svg);
 
   const xy = (lon, lat) => { const [x, y] = project([lon, lat]); return [(x - full.x) * full.scale, (y - full.y) * full.scale]; };
-  const LEFT = new Set(['Hamilton', 'Sarnia', 'Kitchener', 'Kenora', 'Sault Ste. Marie']);
+  const LEFT = new Set(['Hamilton', 'Sarnia', 'Kitchener', 'Sault Ste. Marie', 'Ottawa', 'Kingston', 'Sudbury']);
   let currentView = 'all';
   let cityNodes = [];
   let marker = null;
