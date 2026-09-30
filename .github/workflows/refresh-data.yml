@@ -1,0 +1,55 @@
+name: Refresh data
+
+# Rebuilds data/data.json from the official Ontario open data files every Monday, and on demand.
+# The new file is committed only if the build's validation passes, the tests pass, and the data changed.
+# If anything fails the job stops before the commit step, so good data is never overwritten by bad data.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Tests before build (validation, suppression, forecast, chat)
+        run: |
+          python -m unittest discover -s tests -p "test_*.py"
+          node --test tests/*.test.mjs
+
+      - name: Build data (exits with an error and leaves data.json untouched if validation fails)
+        run: python scripts/build_data.py
+
+      - name: Tests against the new data
+        run: node --test tests/*.test.mjs
+
+      - name: Commit only if data.json changed
+        run: |
+          if git diff --quiet -- data/data.json; then
+            echo "data.json unchanged, nothing to commit."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/data.json
+            git commit -m "Refresh data snapshot"
+            git push
+          fi

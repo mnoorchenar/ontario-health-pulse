@@ -4,8 +4,145 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Ontario Health Pulse</title>
+  <meta name="description" content="Interactive map of public health trends across Ontario public health units. Works offline. Independent demo built on public, aggregated data.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/styles.css">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('ohp-theme');
+        if (!t) t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+    })();
+  </script>
 </head>
 <body>
-  <h1>Ontario Health Pulse</h1>
+  <a class="skip" href="#detail">Skip to region details</a>
+
+  <header class="top">
+    <div class="top-inner">
+      <div class="brand">
+        <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--primary)"/><path d="M5 17h5l3-8 5 15 3-7h6" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div>
+          <h1>Ontario Health Pulse</h1>
+          <p class="asof" id="asof" aria-live="polite">Loading data&hellip;</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <span class="net" id="net" role="status"></span>
+        <button type="button" class="btn primary" id="update-btn">Update data</button>
+        <button type="button" class="btn" id="theme-btn" aria-pressed="false">Dark theme</button>
+      </div>
+    </div>
+    <p class="sources" id="sources"></p>
+  </header>
+
+  <div class="banners" id="banners">
+    <p class="banner" id="update-msg" role="status" hidden></p>
+  </div>
+
+  <main id="main">
+    <div class="fatal card" id="fatal" hidden>
+      <h2>The data could not be loaded</h2>
+      <p>The page could not read its saved data. Check your connection, then try again.</p>
+      <button type="button" class="btn primary" id="retry-btn">Try again</button>
+    </div>
+
+    <div class="layout" id="layout" hidden>
+      <section class="card map-card" aria-labelledby="map-h">
+        <h2 id="map-h">Map of public health units</h2>
+        <div class="controls">
+          <label class="field">
+            <span>Colour the map by</span>
+            <select id="map-mode"></select>
+          </label>
+          <label class="field">
+            <span>Region</span>
+            <select id="region-select"></select>
+          </label>
+        </div>
+        <div class="map-wrap">
+          <div id="map" class="map"></div>
+          <div class="tip" id="tip" role="tooltip" hidden></div>
+        </div>
+        <div class="map-tools">
+          <div class="seg" role="group" aria-label="Map zoom">
+            <button type="button" class="seg-btn" data-view="all" aria-pressed="true">All Ontario</button>
+            <button type="button" class="seg-btn" data-view="south" aria-pressed="false">Southern Ontario</button>
+          </div>
+        </div>
+        <div class="legend" id="legend" aria-label="Map colour legend"></div>
+        <details class="notes">
+          <summary>How to read this data</summary>
+          <ul id="notes-list"></ul>
+        </details>
+      </section>
+
+      <section class="card detail" id="detail" aria-labelledby="detail-h" tabindex="-1">
+        <div class="detail-head">
+          <h2 id="detail-h">Ontario overall</h2>
+          <p class="subtle" id="detail-sub"></p>
+        </div>
+
+        <div class="seg tabs" role="group" aria-label="Measure shown in the chart" id="ind-tabs"></div>
+
+        <p class="summary" id="summary"></p>
+
+        <div class="chart-tools">
+          <label class="field inline">
+            <span>Time span</span>
+            <select id="range-select">
+              <option value="52">Last year</option>
+              <option value="104" selected>Last 2 years</option>
+              <option value="0">Everything</option>
+            </select>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="fc-toggle" checked>
+            <span>Show estimate for the next weeks</span>
+          </label>
+        </div>
+        <div class="chart-box"><canvas id="chart" role="img" aria-label="Trend chart"></canvas></div>
+        <p class="fc-note" id="fc-note"></p>
+
+        <table class="facts" id="facts">
+          <caption class="sr">Latest values and changes</caption>
+        </table>
+
+        <details class="notes">
+          <summary>Show the chart as a table</summary>
+          <div class="table-scroll"><table class="facts small" id="chart-table"></table></div>
+        </details>
+
+        <section class="chat" aria-labelledby="chat-h">
+          <h3 id="chat-h">Ask about this region</h3>
+          <p class="mode" id="chat-mode" aria-live="polite"></p>
+          <div class="chat-log" id="chat-log" role="log" aria-live="polite" aria-label="Conversation"></div>
+          <div class="chips" id="chat-chips"></div>
+          <form class="chat-form" id="chat-form" autocomplete="off">
+            <label class="sr" for="chat-input">Your question</label>
+            <input id="chat-input" type="text" maxlength="200" placeholder="For example: How does this compare with Ontario?">
+            <button type="submit" class="btn primary">Ask</button>
+          </form>
+          <div class="llm" id="llm-box">
+            <button type="button" class="btn" id="llm-btn">Enable smarter answers</button>
+            <p class="subtle" id="llm-note">Optional. Needs a large one-time download (several hundred MB) and a newer laptop. It reads the small fact list for this region only, and falls back to the simple rules if anything goes wrong.</p>
+            <progress id="llm-progress" max="100" value="0" hidden aria-label="Model download progress"></progress>
+          </div>
+        </section>
+      </section>
+    </div>
+  </main>
+
+  <footer class="foot">
+    <p class="disclaimer">Independent demo built on public, aggregated data. Not an official tool and not medical advice.</p>
+    <p>Privacy: this app shows aggregated counts and rates by public health unit only. No personal data is used or collected, and nothing you type leaves this page. Real use would follow Ontario privacy laws such as PHIPA and MFIPPA.</p>
+    <p class="subtle">Contains information licensed under the <a href="https://www.ontario.ca/page/open-government-licence-ontario" rel="noopener">Open Government Licence &ndash; Ontario</a>. Code under the MIT licence.</p>
+  </footer>
+
+  <script src="vendor/chart.umd.js"></script>
+  <script type="module" src="src/main.js"></script>
 </body>
 </html>
