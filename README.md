@@ -6,32 +6,70 @@ sdk: static
 pinned: false
 ---
 
-# Ontario Health Pulse
+<div align="center">
 
-Ontario Health Pulse is an interactive, fully static dashboard for non-technical audiences. It shows a map of Ontario public health units (PHUs). Selecting a region opens a panel with a trend chart, an Ontario comparison line, a short plain-language summary written from the numbers, a simple forecast with an uncertainty band, and an offline chat box for questions about that region. Everything runs in the browser from a saved `data/data.json` snapshot, so it keeps working after the first load even with no internet. There is no backend, no build step, no tracking and no secrets.
+<h1>🗺️ Ontario Health Pulse</h1>
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&duration=3000&pause=1000&color=059669&center=true&vCenter=true&width=700&lines=Ontario+Public+Health+Units+Dashboard;COVID-19+Positivity+·+Vaccination+Coverage;Static+·+Offline-Ready+·+Weekly+Refresh" alt="Typing SVG"/>
+
+<br/>
+
+[![JavaScript](https://img.shields.io/badge/JavaScript-ES2020-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/docs/Web/JavaScript)
+[![HTML5](https://img.shields.io/badge/HTML5-Static-E34F26?style=for-the-badge&logo=html5&logoColor=white)](https://developer.mozilla.org/docs/Web/HTML)
+[![Chart.js](https://img.shields.io/badge/Chart.js-4.x-FF6384?style=for-the-badge&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
+[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-Weekly_Refresh-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://docs.github.com/actions)
+[![Status](https://img.shields.io/badge/Status-Active-22c55e?style=for-the-badge)](#)
+
+<br/>
+
+[![Live Demo](https://img.shields.io/badge/%E2%96%B6_Live_Demo-Hugging_Face_Space-ffcc00?style=for-the-badge&logo=huggingface&logoColor=black)](https://huggingface.co/spaces/mnoorchenar/ontario-health-pulse)
+[![Source Code](https://img.shields.io/badge/Source_Code-GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/mnoorchenar/ontario-health-pulse)
+
+<br/>
+
+**🗺️ Ontario Health Pulse** — Ontario Health Pulse is an interactive, fully static dashboard for non-technical audiences. It shows a map of Ontario public health units (PHUs). Selecting a region opens a panel with a trend chart, an Ontario comparison line, a short plain-language summary written from the numbers, a simple forecast with an uncertainty band, and an offline chat box for questions about that region. Everything runs in the browser from a saved `data/data.json` snapshot, so it keeps working after the first load even with no internet. There is no backend, no build step, no tracking and no secrets.
+
+<br/>
+
+---
+
+</div>
+
+## Table of Contents
+
+- [Overview](#-overview)
+- [Finding your place](#-finding-your-place)
+- [Run locally (Windows PowerShell)](#-run-locally-windows-powershell)
+- [What the data covers (please read)](#️-what-the-data-covers-please-read)
+- [How the weekly refresh works](#️-how-the-weekly-refresh-works)
+- [How the "Update data" button works](#️-how-the-update-data-button-works)
+- [Offline behaviour](#-offline-behaviour)
+- [Chat](#-chat)
+- [Sources and licences](#-sources-and-licences)
+- [Limitations](#-limitations)
+- [Privacy and safety](#-privacy-and-safety)
+- [Project Structure](#-project-structure)
+- [Author](#-author)
+- [Contributing](#-contributing)
+- [Disclaimer](#️-disclaimer)
+- [License](#-license)
+
+---
+
+## 📖 Overview
 
 > **Independent demo built on public, aggregated data. Not an official tool and not medical advice.**
 
 > Screenshot placeholder: add a screenshot of the dashboard here (Hugging Face Spaces rejects binary files unless Xet storage is set up).
 
-## Finding your place
+---
+
+## 🔎 Finding your place
 
 Type a city or town (about 150 are listed, for example Hamilton, London or Thunder Bay) in the search box. The app shows which public health unit serves it, selects that unit and drops a pin on the map; the main cities are also labelled on the map. City-to-unit assignments come from scripts/build_cities.py, which tests approximate town-centre coordinates against the official boundaries. Selecting a different region starts a fresh chat.
 
-## What the data covers (please read)
+---
 
-Only two official, downloadable, aggregated Ontario datasets could be used, and **both were frozen by the province on 2024-11-14**:
-
-| Indicator | Newest week in this snapshot |
-|---|---|
-| COVID-19 test positivity by PHU (7-day average) | 2024-07-31 |
-| Vaccination coverage: at least one dose / 3+ doses, ages 5+ | 2024-11-06 |
-| Vaccination by age group (5-11 up to 80+): at least one dose, fully vaccinated, 3+ doses | 2024-11-06 (latest week only) |
-| Population, share aged 65+ and 0-14 (context, not used in rates) | July 1, 2025 estimate |
-
-The app therefore shows a **historical view** and says so in a banner. It does not include influenza, RSV or hospital data: see "Sources" for why. Forecasts continue from the last week of data, not from today.
-
-## Run locally (Windows PowerShell)
+## 🚀 Run locally (Windows PowerShell)
 
 Any static file server works. With Python installed:
 
@@ -57,7 +95,24 @@ python scripts/build_data.py            # downloads, validates, writes data/data
 python scripts/build_boundaries.py      # optional: rebuild the simplified map shapes
 ```
 
-## How the weekly refresh works
+---
+
+## 🗄️ What the data covers (please read)
+
+Only two official, downloadable, aggregated Ontario datasets could be used, and **both were frozen by the province on 2024-11-14**:
+
+| Indicator | Newest week in this snapshot |
+|---|---|
+| COVID-19 test positivity by PHU (7-day average) | 2024-07-31 |
+| Vaccination coverage: at least one dose / 3+ doses, ages 5+ | 2024-11-06 |
+| Vaccination by age group (5-11 up to 80+): at least one dose, fully vaccinated, 3+ doses | 2024-11-06 (latest week only) |
+| Population, share aged 65+ and 0-14 (context, not used in rates) | July 1, 2025 estimate |
+
+The app therefore shows a **historical view** and says so in a banner. It does not include influenza, RSV or hospital data: see "Sources" for why. Forecasts continue from the last week of data, not from today.
+
+---
+
+## 🏗️ How the weekly refresh works
 
 `.github/workflows/refresh-data.yml` runs every Monday and on manual trigger ("Run workflow" in the Actions tab). It runs the tests, runs `scripts/build_data.py`, runs the tests again on the result, and commits `data/data.json` **only if validation passed and the data actually changed**. The build script validates before writing: expected columns, known PHU names and IDs, plausible non-negative numbers, dates that are newer or equal to the existing file, and row counts that are not suspiciously small. On any failure it exits with an error and leaves the existing file untouched, and the workflow stops before the commit step. Counts of 1 to 4 are masked (set to null) so small cells are never published.
 
@@ -65,19 +120,27 @@ Because both source datasets are frozen, the workflow will currently report "no 
 
 **Relation to `sync.ps1`:** the workflow commits to the `main` branch on GitHub. Your existing `.\sync.ps1` already fetches the `github` remote, merges it, and pushes to both GitHub and the Hugging Face Space, so the next time you run it the refreshed `data.json` is picked up and published to the Space. Nothing in `sync.ps1` or `.syncconfig` needed to change; `sync.ps1` uses `git add -A`, so every new file and folder is included automatically (largest file is about 210 KB, far below the 10 MB warning limit).
 
-## How the "Update data" button works
+---
+
+## 🏗️ How the "Update data" button works
 
 The page never calls an official data site. The button fetches `data/data.json` from this repository's raw GitHub URL (one constant, `REMOTE_DATA_URL` in `src/config.js`). In the browser it checks the structure, the known PHU names, plausible numbers, and that the date is newer or equal, and refuses sample data over real data. Only then does it replace the data in memory and in the offline cache. If anything fails, or there is no internet, the current data stays and it says "Could not update, still showing data from [date]."
 
-## Offline behaviour
+---
+
+## 📴 Offline behaviour
 
 A service worker (`sw.js`) caches every app file, the map shapes and the latest `data.json` after the first load. The Chart.js library is bundled in `vendor/`; there are no CDN links, web fonts or map tiles. The optional "Smarter answers" panel is the single exception and needs internet: you pick one of a few free Hugging Face models (or type a model id) and paste your own free access token. Nothing is downloaded. The token is kept in memory for that tab only (never saved, never in this repository), and only a small fact list for the selected region plus your question is sent. If the call fails, the chat quietly stays in rules mode, and any model answer containing a number that is not in the facts is discarded. The model list is one constant in `src/config.js`.
 
-## Chat
+---
+
+## 🤖 Chat
 
 The default chat is rules-based: keyword and intent matching over the loaded data (latest value, change from last week or last year, comparison with Ontario, highest/lowest region, trend, data date, what a term means). Code calculates every number, and every answer shows the data date and source. Unknown questions get "I don't have that data" plus clickable examples. Personal medical questions are politely declined.
 
-## Sources and licences
+---
+
+## 📚 Sources and licences
 
 | Data | Publisher and link | Licence |
 |---|---|---|
@@ -99,7 +162,9 @@ Sources that were checked but not used:
 
 Public health units that merged on 1 January 2025 (Brant + Haldimand-Norfolk = Grand Erie; Haliburton Kawartha Pine Ridge + Peterborough = Lakelands; Porcupine + Timiskaming = Northeastern; Hastings Prince Edward + Kingston Frontenac Lennox & Addington + Leeds Grenville Lanark = Southeast) are combined for the whole history. Rates are recomputed from combined counts, not averaged.
 
-## Limitations
+---
+
+## 🚧 Limitations
 
 - Historical only: the newest data is from mid-2024 (testing) and November 2024 (vaccination).
 - Test positivity reflects who gets tested; it is not the share of people infected, and it is not the number of cases.
@@ -110,22 +175,122 @@ Public health units that merged on 1 January 2025 (Brant + Haldimand-Norfolk = G
 - **No city-level health figures.** No Ontario open dataset publishes them. A city always shows the figures of the public health unit that serves it, and the app says so. Some cities (for example Toronto and Ottawa) publish neighbourhood data on their own portals; those are not included.
 - Age-group coverage above 100% (seniors) is capped at 100%, as in the source, because population estimates are from 2021.
 
-## Privacy and safety
+---
+
+## 🔒 Privacy and safety
 
 Only public, aggregated data by PHU and date is used. No personal data is requested, stored or sent, and what you type in the chat never leaves the page (except that, if you turn on smarter answers, your question and the region facts are sent to the Hugging Face model you chose, using your own token). Real use would follow Ontario privacy laws such as PHIPA and MFIPPA. The app gives no medical advice; for personal health questions contact a health professional or your local public health unit.
 
-## Project layout
+---
+
+## 📁 Project Structure
 
 ```
-index.html            page shell            sw.js            service worker
-assets/               styles, icon          vendor/          Chart.js (bundled)
-src/                  app modules (ES modules, no build)
-data/data.json        snapshot              data/phu_boundaries.geojson   map shapes
-scripts/              build_data.py, build_boundaries.py
-tests/                Python and Node tests
-.github/workflows/    weekly refresh
+ontario-health-pulse/
+│
+├── 📂 .github/
+│   └── workflows/
+├── 📂 assets/
+│   ├── favicon.svg
+│   └── styles.css
+├── 📂 data/
+│   ├── cities.json
+│   ├── data.json
+│   └── phu_boundaries.geojson
+├── 📂 scripts/
+│   ├── build_boundaries.py
+│   ├── build_cities.py
+│   └── build_data.py
+├── 📂 src/
+│   ├── charts.js
+│   ├── chat.js
+│   ├── cities.js
+│   ├── config.js
+│   ├── data.js
+│   ├── forecast.js
+│   └── … 5 more
+├── 📂 tests/                     # Automated tests
+│   ├── chat.test.mjs
+│   ├── cities.test.mjs
+│   ├── forecast.test.mjs
+│   ├── helpers.mjs
+│   ├── llm.test.mjs
+│   ├── test_build_data.py
+│   └── … 1 more
+├── 📂 vendor/
+│   ├── chart.js.LICENSE.md
+│   └── chart.umd.js
+├── 📄 LICENSE                    # MIT license
+├── 📄 index.html                 # App entry page
+└── 📄 sw.js
 ```
 
-## Disclaimer
+---
 
-Independent demo built on public, aggregated data. Not an official tool and not medical advice.
+## 👨‍💻 Author
+
+<div align="center">
+
+<table>
+<tr>
+<td align="center" width="100%">
+
+<img src="https://avatars.githubusercontent.com/mnoorchenar" width="120" style="border-radius:50%; border: 3px solid #4f46e5;" alt="Mohammad Noorchenarboo"/>
+
+<h3>Mohammad Noorchenarboo</h3>
+
+<code>Data Scientist</code> &nbsp;|&nbsp; <code>AI Researcher</code> &nbsp;|&nbsp; <code>Biostatistician</code>
+
+📍 &nbsp;Ontario, Canada &nbsp;&nbsp; 📧 &nbsp;[mohammadnoorchenarboo@gmail.com](mailto:mohammadnoorchenarboo@gmail.com)
+
+──────────────────────────────────────
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/mnoorchenar)&nbsp;
+[![Personal Site](https://img.shields.io/badge/Website-mnoorchenar.github.io-4f46e5?style=for-the-badge&logo=githubpages&logoColor=white)](https://mnoorchenar.github.io/)&nbsp;
+[![HuggingFace](https://img.shields.io/badge/HuggingFace-ffcc00?style=for-the-badge&logo=huggingface&logoColor=black)](https://huggingface.co/mnoorchenar)&nbsp;
+[![Google Scholar](https://img.shields.io/badge/Scholar-4285F4?style=for-the-badge&logo=googlescholar&logoColor=white)](https://scholar.google.ca/citations?user=nn_Toq0AAAAJ&hl=en)&nbsp;
+[![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/mnoorchenar)
+
+</td>
+</tr>
+</table>
+
+</div>
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1. **Fork** the repository
+2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
+3. **Commit** your changes: `git commit -m 'Add amazing feature'`
+4. **Push** to the branch: `git push origin feature/amazing-feature`
+5. **Open** a Pull Request
+
+---
+
+## ⚠️ Disclaimer
+
+> [!WARNING]
+> Independent demo built on public, aggregated data. Not an official tool and not medical advice.
+
+---
+
+## 📜 License
+
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
+
+---
+
+<div align="center">
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:059669,100:06b6d4&height=120&section=footer&text=Made%20with%20%E2%9D%A4%EF%B8%8F%20by%20Mohammad%20Noorchenarboo&fontColor=ffffff&fontSize=18&fontAlignY=80" width="100%"/>
+
+[![GitHub Stars](https://img.shields.io/github/stars/mnoorchenar/ontario-health-pulse?style=social)](https://github.com/mnoorchenar/ontario-health-pulse/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/mnoorchenar/ontario-health-pulse?style=social)](https://github.com/mnoorchenar/ontario-health-pulse/fork)
+
+<sub>The name "Ontario Health Pulse" is used purely for academic and research purposes. Any similarity to existing product names or trademarks is entirely coincidental. This project has no affiliation with any commercial entity.</sub>
+
+</div>
